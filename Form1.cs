@@ -1,7 +1,5 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Net;
-using System.Threading.Tasks;
 using Octokit;
 
 namespace BBModLoader
@@ -17,7 +15,7 @@ namespace BBModLoader
         DirectoryInfo modsDirectory = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "Mods"));
         FileInfo? gameExe = null;
 
-        string currentVersion = "1.0.0";
+        string currentVersion = "0.1.0";
 
         private void launchInfoButton_Click(object sender, EventArgs e)
         {
