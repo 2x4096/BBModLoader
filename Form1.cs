@@ -1,4 +1,8 @@
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
+using System.Threading.Tasks;
+using Octokit;
 
 namespace BBModLoader
 {
@@ -13,6 +17,8 @@ namespace BBModLoader
         DirectoryInfo modsDirectory = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "Mods"));
         FileInfo? gameExe = null;
 
+        string currentVersion = "1.0.0";
+
         private void launchInfoButton_Click(object sender, EventArgs e)
         {
             MessageBox.Show("Patches and launches the mod; doesn't affect the original game.", "BBModLoader", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -23,7 +29,62 @@ namespace BBModLoader
             MessageBox.Show("Patches the game; affects the original game.", "BBModLoader", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void Form1_Load(object sender, EventArgs e)
+        public static async Task CheckForUpdates(string currentVersionString)
+        {
+            var client = new GitHubClient(new ProductHeaderValue("BBModLoader"));
+
+            try
+            {
+                IReadOnlyList<Release> releases = await client.Repository.Release.GetAll("2x4096", "BBModLoader");
+                if (releases.Count == 0)
+                    return;
+
+                Release latestRelease = releases[0];
+
+                if (latestRelease.Assets == null || latestRelease.Assets.Count == 0)
+                    return;
+
+                string latestTagName = latestRelease.TagName.TrimStart('v');
+                Version latestVersion = new Version(latestTagName);
+                Version currentVersion = new Version(currentVersionString);
+
+                if (currentVersion.CompareTo(latestVersion) >= 0)
+                    return;
+
+                if (MessageBox.Show($"Your current version is outdated. Would you like to update?", "BBModLoader", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.No)
+                    return;
+
+                Random random = new Random();
+
+                string tempFileName = $"bbml-{random.Next()}.zip";
+                FileInfo tempFile = new FileInfo(Path.Combine(Path.GetTempPath(), tempFileName));
+
+                while (tempFile.Exists)
+                {
+                    tempFileName = $"bbml-{random.Next()}.zip";
+                    tempFile = new FileInfo(Path.Combine(Path.GetTempPath(), tempFileName));
+                }
+
+                using (HttpClient httpClient = new HttpClient())
+                using (var response = await httpClient.GetAsync(latestRelease.Assets[0].BrowserDownloadUrl))
+                {
+                    response.EnsureSuccessStatusCode();
+                    await File.WriteAllBytesAsync(tempFile.FullName, await response.Content.ReadAsByteArrayAsync());
+                }
+
+                DirectoryInfo extractDir = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), latestTagName));
+                if (!extractDir.Exists)
+                    extractDir.Create();
+
+                ZipFile.ExtractToDirectory(tempFile.FullName, extractDir.FullName, true);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show($"An exception was caught: {exception.Message}. If this issue persists, please report the issue on the GitHub repository.", "BBModLoader", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+
+        private async void Form1_Load(object sender, EventArgs e)
         {
             if (!modsDirectory.Exists)
             {
@@ -37,6 +98,8 @@ namespace BBModLoader
                 mods.Add(Tuple.Create(modDir.Name, modDir.FullName));
                 modBox.Items.Add(modDir.Name);
             }
+
+            await CheckForUpdates(currentVersion);
         }
 
         private bool RecursiveCopy(string sourceDir, string destinationDir, bool overwrite)
